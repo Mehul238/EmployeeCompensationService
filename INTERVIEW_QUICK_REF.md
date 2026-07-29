@@ -63,3 +63,35 @@ This document contains a simplified, high-level overview of the technologies, ca
 *   **`src/seed.py`**: Reads `schema.sql` to initialize your local SQLite database file (`employee_comp.db`).
 *   **`src/functions/employees.py`**: Holds code for the 5 CRUD endpoints (and default 5% bonus calculations).
 *   **`src/functions/reporting.py`**: Holds code for the 6 aggregate HR compensation reports.
+
+---
+
+## 4. In-Depth File-by-File Operations Guide
+
+### 4.1. `function_app.py`
+This is the core entry point of the serverless API. It initializes the Function App container using `func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)`. The `ANONYMOUS` setting opens public access without requiring access keys. It dynamically imports and attaches the modular Blueprints using `app.register_blueprint()`.
+
+### 4.2. `src/database.py`
+Manages connections and transactions dynamically:
+*   **Auto-Routing**: Reads the `SqlConnectionString` environment variable. If it detects a SQL Server driver configuration (`Driver=`), it initializes connections using `pyodbc.connect()`. Otherwise, it falls back to a local SQLite database (`sqlite3.connect`).
+*   **Formatting Utility**: Maps raw SQL tuple results to clean Python dictionaries dynamically by zipping database headers (`cursor.description`) with row values, matching the expected format for JSON API payloads.
+
+### 4.3. `src/functions/employees.py`
+Organizes the 5 CRUD endpoints:
+*   **Create Employee (`POST /api/employees`)**: Validates JSON payloads, calculates a default 5% bonus if the `Bonus` field is absent or empty, sets `HasDefaultBonusApplied = True`, writes to the database, and fires an HTTP POST request to the Logic App webhook to send an alert.
+*   **Get Employees List (`GET /api/employees`)**: Fetches all employees, with optional department filtering.
+*   **Get Single Employee (`GET /api/employees/{id}`)**: Returns employee details by primary key, or throws a `404 Not Found`.
+*   **Update Employee (`PUT /api/employees/{id}`)**: Modifies records and handles bonus recalculation rules.
+*   **Delete Employee (`DELETE /api/employees/{id}`)**: Executes delete commands to purge records.
+
+### 4.4. `src/functions/reporting.py`
+Organizes the 6 aggregate reports:
+*   **Total Bonus (`GET /api/reports/total-bonus`)**: Sums bonuses using `COALESCE(Bonus, 0)` so null fields count as `0.0`.
+*   **No Bonus (`GET /api/reports/no-bonus`)**: Lists employees where `Bonus IS NULL`.
+*   **Bonus Percentage (`GET /api/reports/bonus-percentage`)**: Casts `Bonus` to `FLOAT` to ensure decimal division works across both SQLite and SQL Server, returning percentage strings.
+*   **High-Bonus Departments (`GET /api/reports/high-bonus-departments`)**: Groups and filters records using `HAVING SUM(e.Bonus) > AVG(e.Salary)`.
+*   **Ranked Bonus (`GET /api/reports/ranked-bonus`)**: Sorts employees with a case statement to ensure those with no bonus are placed last.
+*   **Salary Leader (`GET /api/reports/salary-leader`)**: Fetches the highest-salaried employee and compares them with the highest-compensated employee.
+
+### 4.5. `schema.sql`
+Defines the database architecture. Creates the `Department` table (Primary Key: `DepartmentID`) and the `Employee` table (Primary Key: `EmployeeID`). Configures the foreign key relationship with an `ON DELETE SET NULL` rule to preserve employee data if their department is removed. Seeds initial testing data.
