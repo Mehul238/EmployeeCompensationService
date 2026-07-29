@@ -1,0 +1,6 @@
+# Python dependencies for Employee Compensation Service
+azure-functions
+
+# pyodbc is standard for connecting to SQL Server / Azure SQL Database.
+# Uncomment if connecting to a real Microsoft SQL Server database.
+pyodbc
